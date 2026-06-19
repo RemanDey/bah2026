@@ -1,7 +1,7 @@
 # PROBLEM STATEMENT 9
 
 ## Developing and Optimizing Algorithms for Wavefront Reconstruction and Turbulence Characterization Using Shack-Hartmann Wavefront Sensor (SH-WFS) Time-Series Data
-
+![Alternative text](dxh.webp)
 ### Description
 Turbulence in the atmosphere distorts a plane-parallel wavefront propagating through it. An SH-WFS samples this distorted wavefront using an array of small lenslets. This Microlens Array (MLA) creates a spot-field on the detector and the deviation of these spots from their reference position is used to derive the reconstructed wavefront and its associated zernike coefficients. The conjugate of this reconstructed wavefront is typically used to derive an actuator map in units of the actuator stroke length which is then fed to a deformable mirror (DM) to correct for this distortion in real-time.
 
