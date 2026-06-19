@@ -31,6 +31,6 @@ Since the corrections are to be applied at a rate faster than at which the atmos
 5. Use the conjugate of the reconstructed wavefront to derive an actuator map in terms of the actuator stroke lengths keeping in mind the inter-actuator coupling.
 
 ### Evaluation Criteria
-- Reconstruction of the wavefront phase maps ($W(x_i, y_i)$) for each frame that conform to the turbulence characteristics.
+- Reconstruction of the wavefront phase maps <b><i>( W( x <sub>i</sub> , y <sub>i</sub> ))</i></b> for each frame that conform to the turbulence characteristics.
 - Deriving statistical parameters indicating the strength of turbulence.
 - Speed and computational efficiency of the developed algorithms.
