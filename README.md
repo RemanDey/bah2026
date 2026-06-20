@@ -7,6 +7,7 @@
 ---
 
 ## Overview
+![Pictorial Representation of the Problem](challenge-9-flow-diagram.webp)
 
 This repository contains the solution development for **Challenge Problem Statement 9** of BAH 2026:
 
