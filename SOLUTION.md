@@ -1,4 +1,3 @@
-# SOLUTION.md
 
 ## Advanced Real-Time Wavefront Reconstruction, Turbulence Profiling, and Predictive Control Pipeline for Shack-Hartmann WFS
 
