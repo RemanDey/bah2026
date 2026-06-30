@@ -5,6 +5,13 @@ Shack–Hartmann Wavefront Sensor — interactive diagnostic dashboard.
 ## Overview
 
 Real-time SH-WFS simulation and processing pipeline with a modern web frontend. Generates synthetic subaperture images, estimates wavefront slopes, and reconstructs phase using multiple reconstructor algorithms.
+<img width="1791" height="965" alt="app_screenshot" src="https://github.com/user-attachments/assets/7e870b82-bf2e-43e9-9a44-ec026a0b204a" />
+
+<img width="1791" height="965" alt="app_screenshot2" src="https://github.com/user-attachments/assets/b44cdffd-5b83-44de-b314-bdf0ab5c08f5" />
+<img width="1791" height="965" alt="image" src="https://github.com/user-attachments/assets/2d446980-55a0-4c38-9c5d-62e2f69323d8" />
+
+
+
 
 ## Features
 
