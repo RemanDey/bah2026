@@ -36,7 +36,9 @@ bah2026/
     │   sensors with sparse sub-apertures.pdf
     ├── Data driven branch-point identification.pdf
     ├── Neural network algorithm for under-sampled.pdf
+    ├── PINN_Architecture.pdf
     └── photonics-10-00065-v2.pdf
+     
 ```
 
 ---
