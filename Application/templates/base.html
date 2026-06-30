@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SH-WFS Pipeline{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <span class="logo">SH-WFS</span>
+            <nav class="tabs">
+                <button class="tab active" data-tab="dashboard">Dashboard</button>
+                <button class="tab" data-tab="advanced">Analysis</button>
+                <button class="tab" data-tab="about">About</button>
+            </nav>
+        </div>
+        <div class="header-right">
+            <span class="status-indicator" id="status-dot"></span>
+            <span class="status-text" id="status-text">Ready</span>
+        </div>
+    </header>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="status-bar">
+        <span class="status-bar-item">
+            <span class="value">v2.0</span>
+        </span>
+        <span class="status-bar-item">
+            <span class="label">subapertures</span>
+            <span class="value">16</span>
+        </span>
+        <span class="status-bar-item">
+            <span class="label">actuators</span>
+            <span class="value">25</span>
+        </span>
+        <span class="status-bar-item" style="margin-left:auto;">
+            <span class="label" id="status-bar-timing"></span>
+        </span>
+        <span class="status-bar-item">
+            <span class="value" id="status-bar-fps">-- FPS</span>
+        </span>
+        <span class="status-bar-item" title="Space: toggle auto-run, R: run frame, P: presets">
+            <span class="label">&#9000;</span>
+            <span class="value" style="font-size:10px;">Space/R/P</span>
+        </span>
+    </div>
+
+    <script>
+        document.querySelectorAll('.tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                const target = document.getElementById('tab-' + btn.dataset.tab);
+                if (target) target.classList.add('active');
+            });
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

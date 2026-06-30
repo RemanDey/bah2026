@@ -1,0 +1,991 @@
+{% extends "base.html" %}
+
+{% block title %}SH-WFS Pipeline{% endblock %}
+
+{% block content %}
+<div id="tab-dashboard" class="tab-content active">
+    <div class="grid-layout">
+        <div class="left-panel">
+            <div class="card">
+                <h3><span class="card-icon">&#9654;</span> Atmosphere &amp; Noise</h3>
+                <div class="preset-group">
+                    <label>Preset</label>
+                    <select id="preset-select">
+                        <option value="default">Default</option>
+                        <option value="light">Light Turbulence</option>
+                        <option value="moderate">Moderate Turbulence</option>
+                        <option value="severe">Severe Turbulence</option>
+                        <option value="extreme">Extreme</option>
+                    </select>
+                </div>
+                <div class="slider-group">
+                    <label id="sev-label">Seeding Variance: 1.0</label>
+                    <input type="range" id="severity" min="0.1" max="5.0" step="0.1" value="1.0">
+                </div>
+                <div class="slider-group">
+                    <label id="rn-label">Readout Noise: 1.0</label>
+                    <input type="range" id="readout-noise" min="0" max="8.0" step="0.1" value="1.0">
+                </div>
+                <div class="slider-group">
+                    <label id="pn-label">Photon Noise: 0.08</label>
+                    <input type="range" id="photon-noise" min="0" max="0.5" step="0.01" value="0.08">
+                </div>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" id="kolmogorov" checked> Kolmogorov Phase Screen</label>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#9881;</span> Processing</h3>
+                <button id="trigger-btn">Run Single Frame</button>
+                <div class="auto-run-group">
+                    <label><input type="checkbox" id="auto-run"> Auto-Run</label>
+                    <div class="interval-input-group">
+                        <label>ms</label>
+                        <input type="number" id="interval-ms" value="200" min="50" max="5000" step="50">
+                    </div>
+                </div>
+                <div class="checkbox-group">
+                    <label><input type="checkbox" id="closed-loop"> Closed-Loop</label>
+                    <label><input type="checkbox" id="show-residual"> Before/After</label>
+                </div>
+                <div class="slider-group" style="margin-top:10px;">
+                    <label id="gain-label">Loop Gain: 0.50</label>
+                    <input type="range" id="gain" min="0.05" max="1.0" step="0.05" value="0.5">
+                </div>
+                <div class="preset-group" style="margin-top:8px;">
+                    <label>Centroid Method</label>
+                    <select id="centroid">
+                        <option value="wcom">Windowed COM</option>
+                        <option value="gaussian">Gaussian Fit</option>
+                    </select>
+                </div>
+                <div class="btn-row">
+                    <button class="btn-secondary" id="record-btn">&#9679; Record</button>
+                    <button class="btn-secondary" id="export-btn">&#11123; Export</button>
+                </div>
+                <div class="playback-row" id="playback-row" style="display:none;">
+                    <button class="btn-icon" id="play-btn">&#9654;</button>
+                    <button class="btn-icon" id="prev-btn">&#9664;&#9664;</button>
+                    <button class="btn-icon" id="next-btn">&#9654;&#9654;</button>
+                    <span id="playback-info" style="margin-left:8px;font-size:11px;color:var(--text-muted)"></span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#9636;</span> Subaperture Image</h3>
+                <p class="card-sub">64&times;64 SH-WFS detector &middot; 4&times;4 lenslet array</p>
+                <div class="wfs-canvas-wrap">
+                    <canvas id="wfsCanvas" width="256" height="256"></canvas>
+                    <div id="wfsResidualPlot" class="plot-chart" style="min-height:200px;display:none;"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#9881;</span> Pipeline Summary</h3>
+                <div class="summary-stats">
+                    <div class="stat-row">
+                        <span class="stat-label">Frame</span>
+                        <span id="frame-count" class="stat-value" style="color:var(--accent-cyan)">--</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Fried param r&#8320;</span>
+                        <span id="r0-metric" class="stat-value">-- mm</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Strehl Ratio</span>
+                        <span id="strehl-metric" class="stat-value" style="color:var(--accent-emerald)">-- %</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Slopes RMS</span>
+                        <span id="slopes-rms" class="stat-value">--</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Phase std dev</span>
+                        <span id="phase-std" class="stat-value">--</span>
+                    </div>
+                    <div class="stat-row" id="corrected-stats-row" style="display:none;">
+                        <span class="stat-label">Corrected Strehl</span>
+                        <span id="corrected-strehl" class="stat-value" style="color:var(--accent-emerald)">-- %</span>
+                    </div>
+                    <div class="stat-row" id="cl-stats-row" style="display:none;">
+                        <span class="stat-label">CL Iter / Strehl</span>
+                        <span id="cl-metric" class="stat-value" style="color:var(--accent-cyan)">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#8801;</span> Reconstructor Comparison</h3>
+                <div id="reconstructorPlot" class="plot-chart" style="min-height:120px;"></div>
+                <div class="stat-row" style="padding:6px 0;border:none;font-size:11px;">
+                    <span style="color:var(--text-muted)">LS &middot; Tikhonov &middot; PINN Strehl</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="card">
+                <h3><span class="card-icon">&#9673;</span> Actuator Drive Vectors</h3>
+                <p class="card-sub">Reconstructed phase &amp; mirror commands &middot; first 5 channels</p>
+                <div class="vector-block">
+                    <div class="vector-label">&phi; &mdash; Phase Map Estimate</div>
+                    <div class="vector-visualizer" id="phase-vector"></div>
+                </div>
+                <div class="vector-block">
+                    <div class="vector-label">u_linear &mdash; Decoupled Mirror Strokes</div>
+                    <div class="vector-visualizer" id="linear-vector"></div>
+                </div>
+                <div class="vector-block">
+                    <div class="vector-label">u_PINN &mdash; Residual Edge Corrector</div>
+                    <div class="vector-visualizer" id="pinn-vector"></div>
+                </div>
+                <div class="vector-block">
+                    <div class="vector-label">u_final &mdash; Total Actuator Drive</div>
+                    <div class="vector-visualizer" id="final-vector"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#9638;</span> Actuator Map &amp; Phase Map</h3>
+                <p class="card-sub">DM stroke amplitude (left) &middot; Reconstructed phase (right)</p>
+                <div class="dual-canvas-sm">
+                    <div class="canvas-box">
+                        <div id="actuatorMapPlot" class="plot-chart"></div>
+                        <div class="canvas-label">DM strokes</div>
+                    </div>
+                    <div class="canvas-box">
+                        <div id="phaseMapPlot" class="plot-chart"></div>
+                        <div class="canvas-label">Phase map</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#9678;</span> PSF &amp; Zernike Modes</h3>
+                <p class="card-sub">Point spread function (left) &middot; Aberration breakdown (right)</p>
+                <div class="dual-canvas-sm">
+                    <div class="canvas-box">
+                        <div id="psfPlot" class="plot-chart"></div>
+                        <div class="canvas-label">PSF</div>
+                    </div>
+                    <div class="canvas-box">
+                        <div id="zernikePlot" class="plot-chart"></div>
+                        <div class="canvas-label">Zernike coeffs</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#8605;</span> Metrics Trend</h3>
+                <p class="card-sub">Recent history &middot; r&#8320;, Strehl, Slopes RMS, Phase std</p>
+                <div class="trend-container">
+                    <div id="trendPlot" class="plot-chart plot-tall"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#9632;</span> 3D Phase Surface</h3>
+                <p class="card-sub">Reconstructed wavefront &middot; 5&times;5 actuator grid interpolated</p>
+                <div id="surfacePlot" class="plot-chart" style="min-height:260px;"></div>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">&#9850;</span> Strehl vs r&#8320;</h3>
+                <p class="card-sub">Mar&eacute;chal approximation &middot; last 50 frames</p>
+                <div id="scatterPlot" class="plot-chart" style="min-height:220px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="tab-advanced" class="tab-content">
+    <div class="grid-layout advanced-layout">
+        <div class="left-panel">
+            <div class="card">
+                <h3><span class="card-icon">&#9654;</span> Control Panel</h3>
+                <button id="refresh-advanced-btn">Refresh Analysis</button>
+                <p class="card-sub" style="margin-top:10px;">Slope buffer: <span id="slope-buf-count">0</span> frames</p>
+            </div>
+            <div class="card">
+                <h3><span class="card-icon">&#9638;</span> Slope Covariance (32&times;32)</h3>
+                <p class="card-sub">X+Y cross-channel covariance &middot; <span id="cov-n">0</span> frames</p>
+                <div id="covariancePlot" class="plot-chart plot-med"></div>
+            </div>
+            <div class="card">
+                <h3><span class="card-icon">&#9638;</span> Total-Power Covariance (16&times;16)</h3>
+                <p class="card-sub">&#8492;[sx&#7522;&#183;sx&#7523; + sy&#7522;&#183;sy&#7523;] per subap pair</p>
+                <div id="covariance16Plot" class="plot-chart plot-med"></div>
+            </div>
+            <div class="card">
+                <h3><span class="card-icon">&#9636;</span> Slopes Histogram</h3>
+                <p class="card-sub">Combined X &amp; Y slope distribution</p>
+                <div id="histogramPlot" class="plot-chart plot-med"></div>
+            </div>
+        </div>
+        <div class="right-panel">
+            <div class="card">
+                <h3><span class="card-icon">&#9673;</span> Slope Vector Analysis</h3>
+                <p class="card-sub">X &amp; Y local gradients &middot; 4&times;4 lenslet array</p>
+                <div class="dual-canvas">
+                    <div class="canvas-box">
+                        <div class="vector-label">Slopes X <span style="color:var(--text-muted);font-weight:400;">&mdash; blue</span></div>
+                        <div id="slopesXPlot" class="plot-chart plot-med"></div>
+                    </div>
+                    <div class="canvas-box">
+                        <div class="vector-label">Slopes Y <span style="color:var(--text-muted);font-weight:400;">&mdash; cyan</span></div>
+                        <div id="slopesYPlot" class="plot-chart plot-med"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h3><span class="card-icon">&#9851;</span> X-vs-Y Slope Scatter</h3>
+                <p class="card-sub">Each subaperture &middot; colored by lenslet index (0&ndash;15)</p>
+                <div id="xyScatterPlot" class="plot-chart plot-med"></div>
+            </div>
+            <div class="card">
+                <h3><span class="card-icon">&#8861;</span> Temporal PSD</h3>
+                <p class="card-sub">Average power spectrum of all 32 channels &middot; <span id="psd-n">0</span> frames</p>
+                <div id="psdPlot" class="plot-chart plot-med"></div>
+            </div>
+            <div class="card">
+                <h3><span class="card-icon">&#9670;</span> Zernike Mode Gallery</h3>
+                <p class="card-sub">Mode shapes &middot; 5&times;5 actuator grid &middot; pupil-masked</p>
+                <div id="zernikeGallery" class="zernike-gallery"></div>
+            </div>
+            <div class="card">
+                <h3><span class="card-icon">&#9881;</span> Statistical Summary</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <span class="stat-label">Slopes X</span>
+                        <div class="stat-metrics">
+                            <div class="stat-row"><span>mean</span><span id="sx-mean">--</span></div>
+                            <div class="stat-row"><span>std</span><span id="sx-std">--</span></div>
+                            <div class="stat-row"><span>max</span><span id="sx-max">--</span></div>
+                            <div class="stat-row"><span>min</span><span id="sx-min">--</span></div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Slopes Y</span>
+                        <div class="stat-metrics">
+                            <div class="stat-row"><span>mean</span><span id="sy-mean">--</span></div>
+                            <div class="stat-row"><span>std</span><span id="sy-std">--</span></div>
+                            <div class="stat-row"><span>max</span><span id="sy-max">--</span></div>
+                            <div class="stat-row"><span>min</span><span id="sy-min">--</span></div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Phase Map</span>
+                        <div class="stat-metrics">
+                            <div class="stat-row"><span>mean</span><span id="ph-mean">--</span></div>
+                            <div class="stat-row"><span>std</span><span id="ph-std">--</span></div>
+                            <div class="stat-row"><span>max</span><span id="ph-max">--</span></div>
+                            <div class="stat-row"><span>min</span><span id="ph-min">--</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="tab-about" class="tab-content">
+    <div class="about-container">
+        <div class="card about-card">
+            <h3><span class="card-icon">&#8505;</span> About the SH-WFS Pipeline</h3>
+            <p class="card-sub">Shack&ndash;Hartmann Wavefront Sensor &mdash; High-Performance Diagnostic Framework</p>
+            <div class="about-body">
+                <section>
+                    <h4>Overview</h4>
+                    <p>This dashboard demonstrates a modular Shack&ndash;Hartmann Wavefront Sensor (SH-WFS) processing pipeline. It simulates atmospheric turbulence, captures synthetic subaperture images, estimates wavefront slopes via center-of-mass, and reconstructs the phase using a learned reconstructor matrix.</p>
+                </section>
+                <section>
+                    <h4>Pipeline Stages</h4>
+                    <ol class="pipeline-list">
+                        <li><strong>Atmospheric Phase Simulation</strong> &mdash; Synthetic turbulence injected as spot displacements on a 4&times;4 lenslet grid (64&times;64 px detector).</li>
+                        <li><strong>Windowed Center-of-Mass</strong> &mdash; Subaperture gradient extraction with background thresholding.</li>
+                        <li><strong>Phase Reconstruction</strong> &mdash; Linear reconstructor matrix mapping slopes to actuator commands.</li>
+                        <li><strong>Decoupled Mirror Control</strong> &mdash; Pseudo-inverse control matrix for DM stroke linearization.</li>
+                        <li><strong>PINN Residual Correction</strong> &mdash; Edge-case non-linearity compensation via tanh-activated neural inference.</li>
+                        <li><strong>PSF Computation</strong> &mdash; Far-field diffraction pattern derived from the reconstructed phase.</li>
+                        <li><strong>Zernike Decomposition</strong> &mdash; Modal analysis identifying dominant aberrations (tip, tilt, defocus, etc.).</li>
+                    </ol>
+                </section>
+                <section>
+                    <h4>System</h4>
+                    <ul class="tech-list">
+                        <li><span class="tech-badge" id="about-python">Python</span></li>
+                        <li><span class="tech-badge" id="about-numpy">NumPy</span></li>
+                        <li><span class="tech-badge" id="about-scipy">SciPy</span></li>
+                        <li><span class="tech-badge" id="about-platform">Platform</span></li>
+                    </ul>
+                </section>
+                <section>
+                    <h4>Technology Stack</h4>
+                    <ul class="tech-list">
+                        <li><span class="tech-badge">Python 3</span> NumPy/SciPy pipeline</li>
+                        <li><span class="tech-badge">Flask</span> REST API backend</li>
+                        <li><span class="tech-badge">Plotly</span> interactive graphing</li>
+                        <li><span class="tech-badge">Canvas API</span> WFS rendering</li>
+                    </ul>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const canvas = document.getElementById('wfsCanvas');
+    const ctx = canvas.getContext('2d');
+    let lastData = null, autoTimer = null;
+    let isRecording = false, recordedFrames = [], playbackIdx = -1, playbackTimer = null;
+    let lastFrameTime = 0, fps = 0;
+
+    const buffers = { r0: [], strehl: [], slopesRms: [], phaseStd: [] };
+    const MAX_BUFFER = 50;
+
+    const scatterHistory = [];
+
+    // ── Plotly config ──
+    const plotCfg = { displayModeBar: false, responsive: true };
+    const plotCfgModebar = { displayModeBar: true, responsive: true,
+        modeBarButtonsToRemove: ['sendDataToCloud', 'lasso2d', 'select2d'],
+        displaylogo: false,
+    };
+
+    const plotBase = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { family: '"JetBrains Mono", monospace', size: 10, color: '#94a3b8' },
+        xaxis: { showgrid: true, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, showticklabels: true },
+        yaxis: { showgrid: true, gridcolor: 'rgba(255,255,255,0.04)', zeroline: false, showticklabels: true },
+    };
+
+    function divergeScale() {
+        return [
+            [0, 'rgb(10,20,60)'], [0.15, 'rgb(25,50,130)'], [0.3, 'rgb(55,100,190)'],
+            [0.45, 'rgb(130,175,225)'], [0.5, 'rgb(230,230,240)'],
+            [0.55, 'rgb(220,170,110)'], [0.7, 'rgb(190,90,50)'], [0.85, 'rgb(130,35,35)'], [1, 'rgb(130,35,35)'],
+        ];
+    }
+
+    function hotScale() {
+        return [
+            [0, 'rgb(0,0,0)'], [0.2, 'rgb(60,15,0)'], [0.4, 'rgb(180,60,20)'],
+            [0.6, 'rgb(240,140,40)'], [0.8, 'rgb(255,220,100)'], [1, 'rgb(255,255,200)'],
+        ];
+    }
+
+    function getParams() {
+        return {
+            severity: document.getElementById('severity').value,
+            readout_noise: document.getElementById('readout-noise').value,
+            photon_noise: document.getElementById('photon-noise').value,
+            closed_loop: document.getElementById('closed-loop').checked ? 'true' : 'false',
+            show_residual: document.getElementById('show-residual').checked ? 'true' : 'false',
+            kolmogorov: document.getElementById('kolmogorov').checked ? 'true' : 'false',
+            centroid: document.getElementById('centroid').value,
+            gain: document.getElementById('gain').value,
+        };
+    }
+
+    function plotHeatmap(id, z, colorscale, opts) {
+        const zmin = opts?.zmin, zmax = opts?.zmax, zmid = opts?.zmid;
+        const showText = opts?.showText !== false;
+        const txt = showText ? z.map(r => r.map(v => v != null ? v.toFixed(2) : '')) : undefined;
+        const trace = {
+            z, type: 'heatmap', colorscale,
+            showscale: false,
+            hovertemplate: '%{z:.4f}<extra></extra>',
+            xgap: 2, ygap: 2,
+            text: showText ? txt : undefined,
+            texttemplate: showText ? '%{text}' : undefined,
+            textfont: { size: 10, color: '#e2e8f0' },
+        };
+        if (zmid !== undefined) trace.zmid = zmid;
+        if (zmin !== undefined) trace.zmin = zmin;
+        if (zmax !== undefined) trace.zmax = zmax;
+        Plotly.react(id, [trace], {
+            ...plotBase, ...(opts?.layout || {}),
+            margin: { l: 0, r: 0, t: 0, b: 0 },
+            xaxis: { visible: false },
+            yaxis: { visible: false, autorange: 'reversed' },
+            width: undefined, height: undefined,
+        }, plotCfg);
+    }
+
+    function applyPupilMask(z, mask) {
+        if (!z || !mask || z.length !== mask.length) return z;
+        return z.map((row, i) => row.map((v, j) => {
+            const mi = Math.round(i / z.length * mask.length);
+            const mj = Math.round(j / z[0].length * mask[0].length);
+            const mi2 = Math.min(mi, mask.length - 1);
+            const mj2 = Math.min(mj, mask[0].length - 1);
+            return mask[mi2][mj2] > 0 ? v : null;
+        }));
+    }
+
+    async function updatePipeline() {
+        try {
+        const params = getParams();
+        document.getElementById('sev-label').innerText = `Seeding Variance: ${params.severity}`;
+        document.getElementById('rn-label').innerText = `Readout Noise: ${params.readout_noise}`;
+        document.getElementById('pn-label').innerText = `Photon Noise: ${params.photon_noise}`;
+        document.getElementById('gain-label').innerText = `Loop Gain: ${params.gain}`;
+        document.getElementById('status-text').innerText = 'Processing...';
+
+        const t0 = performance.now();
+        const qs = new URLSearchParams(params).toString();
+        const response = await fetch(`/api/step?${qs}`);
+        const data = await response.json();
+        const dt = ((performance.now() - t0) / 1000).toFixed(2);
+        lastData = data;
+        document.getElementById('status-bar-timing').innerText = `pipeline: ${dt}s`;
+
+        const now = performance.now();
+        if (lastFrameTime > 0) fps = Math.round(1000 / (now - lastFrameTime));
+        lastFrameTime = now;
+
+        // ── WFS canvas ──
+        const w = canvas.width, h = canvas.height;
+        const imgData = ctx.createImageData(w, h);
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const mx = Math.floor(x / 4), my = Math.floor(y / 4);
+                const val = data.frame_matrix[my][mx] / 255;
+                const idx = (y * w + x) * 4;
+                const t = Math.pow(val, 1.4);
+                imgData.data[idx] = Math.min(255, Math.round(255 * t));
+                imgData.data[idx + 1] = Math.min(255, Math.round(200 * t * t));
+                imgData.data[idx + 2] = Math.min(255, Math.round(100 * t * t * t * t));
+                imgData.data[idx + 3] = 255;
+            }
+        }
+        ctx.putImageData(imgData, 0, 0);
+        ctx.strokeStyle = 'rgba(99, 102, 241, 0.12)';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i <= 4; i++) { const p = i * 64;
+            ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, h); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(w, p); ctx.stroke();
+        }
+
+        const showRes = document.getElementById('show-residual').checked;
+        const resPlot = document.getElementById('wfsResidualPlot');
+        if (showRes && data.corrected_phase_2d) {
+            resPlot.style.display = 'block'; canvas.style.display = 'none';
+            plotHeatmap('wfsResidualPlot', data.corrected_phase_2d, divergeScale(), { zmid: 0, showText: false });
+        } else {
+            resPlot.style.display = 'none'; canvas.style.display = 'block';
+        }
+
+        // ── Stats ──
+        document.getElementById('frame-count').innerText = data.frame;
+        document.getElementById('r0-metric').innerText = `${data.r0} mm`;
+        document.getElementById('strehl-metric').innerText = `${data.strehl} %`;
+        document.getElementById('slopes-rms').innerText = data.slopes_rms.toFixed(4);
+        document.getElementById('phase-std').innerText = data.phase_std.toFixed(4);
+        const csRow = document.getElementById('corrected-stats-row');
+        if (showRes && data.corrected_strehl !== undefined) {
+            csRow.style.display = 'flex';
+            document.getElementById('corrected-strehl').innerText = `${data.corrected_strehl} %`;
+        } else { csRow.style.display = 'none'; }
+
+        const clRow = document.getElementById('cl-stats-row');
+        const clOn = document.getElementById('closed-loop').checked;
+        if (clOn && data.cl_iteration !== undefined) {
+            clRow.style.display = 'flex';
+            document.getElementById('cl-metric').innerText = `#${data.cl_iteration} / ${data.cl_strehl}%`;
+        } else { clRow.style.display = 'none'; }
+
+        // ── Vector cells ──
+        const renderVectorCells = (elementId, arr) => {
+            const container = document.getElementById(elementId);
+            container.innerHTML = '';
+            arr.slice(0, 5).forEach((val, i) => {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                const sign = val >= 0 ? '+' : '';
+                cell.innerHTML = `<span class="cell-ch">Ch ${i}</span><span class="cell-val">${sign}${val.toFixed(4)}</span>`;
+                container.appendChild(cell);
+            });
+        };
+        renderVectorCells('phase-vector', data.phase_map);
+        renderVectorCells('linear-vector', data.dm_linear);
+        renderVectorCells('pinn-vector', data.dm_pinn);
+        renderVectorCells('final-vector', data.dm_final);
+
+        // ── Actuator map heatmap ──
+        plotHeatmap('actuatorMapPlot', data.dm_final_2d, divergeScale(), { zmid: 0 });
+
+        // ── Phase map heatmap (with pupil mask) ──
+        let phaseDisplay = data.dm_final_2d;
+        if (data.pupil_mask) {
+            phaseDisplay = applyPupilMask(data.dm_final_2d, data.pupil_mask);
+        }
+        plotHeatmap('phaseMapPlot', phaseDisplay, divergeScale(), { zmid: 0, showText: false });
+
+        // ── PSF heatmap (log scale) ──
+        if (data.psf) {
+            const n = data.psf.length;
+            let maxV = 0;
+            for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) maxV = Math.max(maxV, data.psf[r][c]);
+            maxV = Math.max(maxV, 0.001);
+            const psfLog = data.psf.map(row => row.map(v => Math.log10(v / maxV + 1e-10)));
+            plotHeatmap('psfPlot', psfLog, hotScale(), {
+                zmin: -6, zmax: 0, showText: false,
+                layout: { hoverlabel: { namelength: -1 } },
+            });
+        }
+
+        // ── Zernike bar chart (with modebar) ──
+        if (data.zernike) {
+            const entries = Object.entries(data.zernike);
+            const names = entries.map(([n]) => n);
+            const vals = entries.map(([, v]) => v);
+            Plotly.react('zernikePlot', [{
+                y: names, x: vals, type: 'bar', orientation: 'h',
+                marker: { color: vals.map(v => v >= 0 ? '#6366f1' : '#f43f5e'), line: { width: 0 } },
+                hovertemplate: '%{y}: %{x:.4f}<extra></extra>',
+            }], {
+                ...plotBase,
+                margin: { l: 65, r: 40, t: 6, b: 6 },
+                xaxis: { ...plotBase.xaxis, showticklabels: false, zeroline: true, zerolinecolor: 'rgba(255,255,255,0.08)' },
+                yaxis: { ...plotBase.yaxis, showgrid: false, automargin: true },
+                bargap: 0.3,
+            }, plotCfgModebar);
+        }
+
+        // ── Buffers ──
+        buffers.r0.push(data.r0);
+        buffers.strehl.push(data.strehl);
+        buffers.slopesRms.push(data.slopes_rms);
+        buffers.phaseStd.push(data.phase_std);
+        Object.keys(buffers).forEach(k => { if (buffers[k].length > MAX_BUFFER) buffers[k].shift(); });
+
+        // ── Multi-metric trend (with modebar) ──
+        const idx = buffers.r0.map((_, i) => i);
+        const colors = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e'];
+        const names2 = ['r\u2080 (mm)', 'Strehl (%)', 'Slopes RMS', 'Phase \u03c3'];
+        const keys = ['r0', 'strehl', 'slopesRms', 'phaseStd'];
+        const traces = keys.map((k, i) => ({
+            x: idx, y: buffers[k], name: names2[i], type: 'scatter', mode: 'lines+markers',
+            line: { color: colors[i], width: 2 },
+            marker: { color: colors[i], size: 3 },
+            hovertemplate: `${names2[i]}: %{y:.4f}<extra></extra>`,
+        }));
+        Plotly.react('trendPlot', traces, {
+            ...plotBase,
+            margin: { l: 30, r: 10, t: 10, b: 30 },
+            legend: { orientation: 'h', y: 1.08, font: { size: 9, color: '#94a3b8' }, bgcolor: 'rgba(0,0,0,0)' },
+            xaxis: { ...plotBase.xaxis, title: 'Frame' },
+            yaxis: { ...plotBase.yaxis, title: '' },
+            hovermode: 'x unified',
+        }, plotCfgModebar);
+
+        // ── Reconstructor comparison bar ──
+        Plotly.react('reconstructorPlot', [{
+            x: ['LS', 'Tikhonov', 'PINN'],
+            y: [data.strehl_ls || 0, data.strehl_reg || 0, data.strehl_pinn || 0],
+            type: 'bar',
+            marker: {
+                color: ['#6366f1', '#06b6d4', '#10b981'],
+                line: { width: 0 },
+            },
+            hovertemplate: '%{x}: %{y:.1f}%<extra></extra>',
+        }], {
+            ...plotBase,
+            margin: { l: 24, r: 10, t: 6, b: 24 },
+            xaxis: { ...plotBase.xaxis, showticklabels: true, tickangle: 0 },
+            yaxis: { ...plotBase.yaxis, showticklabels: false, range: [0, 100] },
+            bargap: 0.3,
+        }, plotCfg);
+
+        // ── 3D Phase Surface ──
+        if (data.phase_3d) {
+            const n = data.phase_3d.length;
+            const xg = Array.from({ length: n }, (_, i) => i);
+            const yg = Array.from({ length: n }, (_, i) => i);
+            Plotly.react('surfacePlot', [{
+                z: data.phase_3d, type: 'surface',
+                colorscale: 'RdBu',
+                showscale: false,
+                contours: { z: { show: true, usecolormap: true, highlightcolor: '#fff', project: { z: true } } },
+                hovertemplate: 'x: %{x}<br>y: %{y}<br>z: %{z:.4f}<extra></extra>',
+            }], {
+                ...plotBase,
+                margin: { l: 0, r: 0, t: 0, b: 0 },
+                scene: {
+                    xaxis: { visible: false },
+                    yaxis: { visible: false },
+                    zaxis: { visible: false },
+                    bgcolor: 'rgba(0,0,0,0)',
+                    camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } },
+                },
+                width: undefined, height: undefined,
+            }, plotCfg);
+        }
+
+        // ── Strehl vs r₀ scatter ──
+        if (data.scatter_data) {
+            scatterHistory.push(...data.scatter_data);
+            if (scatterHistory.length > 200) scatterHistory.splice(0, scatterHistory.length - 200);
+            const pts = scatterHistory.slice(-50);
+            const r0s = pts.map(p => p.r0);
+            const strehs = pts.map(p => p.strehl);
+            const theoryR0 = Array.from({ length: 50 }, (_, i) => 1 + i * 0.4);
+            const theoryStr = theoryR0.map(r => 100 * Math.exp(-Math.pow(0.5 / r, 2)));
+            Plotly.react('scatterPlot', [
+                {
+                    x: r0s, y: strehs, type: 'scatter', mode: 'markers',
+                    name: 'Measured',
+                    marker: { color: '#6366f1', size: 5, opacity: 0.7, line: { width: 0.5, color: '#fff' } },
+                    hovertemplate: 'r\u2080: %{x:.2f}<br>Strehl: %{y:.1f}%<extra></extra>',
+                },
+                {
+                    x: theoryR0, y: theoryStr, type: 'scatter', mode: 'lines',
+                    name: 'Mar\u00e9chal',
+                    line: { color: 'rgba(245,158,11,0.5)', width: 1.5, dash: 'dash' },
+                    hovertemplate: 'r\u2080: %{x:.2f}<br>Strehl: %{y:.1f}%<extra></extra>',
+                },
+            ], {
+                ...plotBase,
+                margin: { l: 36, r: 10, t: 6, b: 30 },
+                xaxis: { ...plotBase.xaxis, title: 'r\u2080 (mm)' },
+                yaxis: { ...plotBase.yaxis, title: 'Strehl (%)', range: [0, 105] },
+                showlegend: true,
+                legend: { orientation: 'h', y: 1.08, font: { size: 9, color: '#94a3b8' }, bgcolor: 'rgba(0,0,0,0)' },
+                hovermode: 'closest',
+            }, plotCfg);
+        }
+
+        if (isRecording) recordedFrames.push(data);
+        document.getElementById('status-text').innerText = 'Ready';
+        } catch (e) { console.error('updatePipeline error:', e); document.getElementById('status-text').innerText = 'Error'; }
+    }
+
+    // ── Presets ──
+    async function applyPreset(name) {
+        const r = await fetch('/api/presets');
+        const presets = await r.json();
+        const p = presets[name];
+        if (!p) return;
+        document.getElementById('severity').value = p.severity;
+        document.getElementById('readout-noise').value = p.readout_noise;
+        document.getElementById('photon-noise').value = p.photon_noise;
+        updatePipeline();
+    }
+    document.getElementById('preset-select').addEventListener('change', function () { applyPreset(this.value); });
+
+    // ── Record / Export ──
+    document.getElementById('record-btn').addEventListener('click', function () {
+        if (!isRecording) {
+            isRecording = true; recordedFrames = [];
+            this.textContent = '\u25A0 Stop'; this.style.background = '#ef4444';
+            document.getElementById('playback-row').style.display = 'none';
+        } else {
+            isRecording = false;
+            this.textContent = '\u25CF Record'; this.style.background = '';
+            if (recordedFrames.length > 0) {
+                document.getElementById('playback-row').style.display = 'flex';
+                document.getElementById('playback-info').textContent = `${recordedFrames.length} frames`;
+            }
+        }
+    });
+
+    document.getElementById('play-btn').addEventListener('click', function () {
+        if (playbackTimer) { clearInterval(playbackTimer); playbackTimer = null; this.textContent = '\u25B6'; return; }
+        if (recordedFrames.length === 0) return;
+        this.textContent = '\u23F8'; playbackIdx = 0;
+        playbackTimer = setInterval(() => {
+            if (playbackIdx >= recordedFrames.length) playbackIdx = 0;
+            renderPlaybackFrame(recordedFrames[playbackIdx]); playbackIdx++;
+        }, 200);
+    });
+    document.getElementById('prev-btn').addEventListener('click', () => {
+        if (!recordedFrames.length) return;
+        playbackIdx = Math.max(0, (playbackIdx || 0) - 1);
+        renderPlaybackFrame(recordedFrames[playbackIdx]);
+    });
+    document.getElementById('next-btn').addEventListener('click', () => {
+        if (!recordedFrames.length) return;
+        playbackIdx = Math.min(recordedFrames.length - 1, (playbackIdx || 0) + 1);
+        renderPlaybackFrame(recordedFrames[playbackIdx]);
+    });
+
+    function renderPlaybackFrame(data) {
+        const imgData = ctx.createImageData(256, 256);
+        for (let y = 0; y < 256; y++)
+            for (let x = 0; x < 256; x++) {
+                const mx = Math.floor(x / 4), my = Math.floor(y / 4);
+                const val = data.frame_matrix[my][mx] / 255;
+                const idx = (y * 256 + x) * 4;
+                const t = Math.pow(val, 1.4);
+                imgData.data[idx] = Math.min(255, Math.round(255 * t));
+                imgData.data[idx+1] = Math.min(255, Math.round(200 * t * t));
+                imgData.data[idx+2] = Math.min(255, Math.round(100 * t * t * t * t));
+                imgData.data[idx+3] = 255;
+            }
+        ctx.putImageData(imgData, 0, 0);
+        plotHeatmap('actuatorMapPlot', data.dm_final_2d, divergeScale(), { zmid: 0 });
+        let ph = data.dm_final_2d;
+        if (data.pupil_mask) ph = applyPupilMask(ph, data.pupil_mask);
+        plotHeatmap('phaseMapPlot', ph, divergeScale(), { zmid: 0, showText: false });
+        if (data.psf) {
+            const n = data.psf.length; let maxV = 0;
+            for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) maxV = Math.max(maxV, data.psf[r][c]);
+            maxV = Math.max(maxV, 0.001);
+            const psfLog = data.psf.map(row => row.map(v => Math.log10(v / maxV + 1e-10)));
+            plotHeatmap('psfPlot', psfLog, hotScale(), { zmin: -6, zmax: 0, showText: false });
+        }
+        if (data.zernike) {
+            const entries = Object.entries(data.zernike);
+            Plotly.react('zernikePlot', [{
+                y: entries.map(([n]) => n), x: entries.map(([, v]) => v), type: 'bar', orientation: 'h',
+                marker: { color: entries.map(([, v]) => v >= 0 ? '#6366f1' : '#f43f5e'), line: { width: 0 } },
+            }], { ...plotBase, margin: { l: 65, r: 40, t: 6, b: 6 },
+                xaxis: { ...plotBase.xaxis, showticklabels: false, zeroline: true, zerolinecolor: 'rgba(255,255,255,0.08)' },
+                yaxis: { ...plotBase.yaxis, showgrid: false, automargin: true }, bargap: 0.3,
+            }, plotCfgModebar);
+        }
+        document.getElementById('frame-count').innerText = data.frame || '--';
+        document.getElementById('playback-info').textContent = `Playback: ${playbackIdx + 1}/${recordedFrames.length}`;
+    }
+
+    document.getElementById('export-btn').addEventListener('click', function () {
+        if (!lastData) return;
+        const json = JSON.stringify(lastData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url;
+        a.download = `shwfs_frame_${lastData.frame}.json`;
+        a.click(); URL.revokeObjectURL(url);
+    });
+
+    // ── Auto-run ──
+    function toggleAutoRun() {
+        const enabled = document.getElementById('auto-run').checked;
+        const dot = document.getElementById('status-dot');
+        if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+        if (enabled) {
+            const ms = parseInt(document.getElementById('interval-ms').value) || 200;
+            autoTimer = setInterval(updatePipeline, ms);
+            if (dot) dot.classList.remove('paused');
+        } else { if (dot) dot.classList.add('paused'); }
+    }
+    document.getElementById('auto-run').addEventListener('change', toggleAutoRun);
+    document.getElementById('interval-ms').addEventListener('change', toggleAutoRun);
+    document.getElementById('trigger-btn').addEventListener('click', updatePipeline);
+    document.getElementById('severity').addEventListener('input', updatePipeline);
+    document.getElementById('readout-noise').addEventListener('input', updatePipeline);
+    document.getElementById('photon-noise').addEventListener('input', updatePipeline);
+    document.getElementById('closed-loop').addEventListener('change', updatePipeline);
+    document.getElementById('show-residual').addEventListener('change', updatePipeline);
+    document.getElementById('kolmogorov').addEventListener('change', updatePipeline);
+    document.getElementById('centroid').addEventListener('change', updatePipeline);
+    document.getElementById('gain').addEventListener('input', updatePipeline);
+
+    // ── Keyboard shortcuts ──
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+        switch (e.key) {
+            case ' ': e.preventDefault();
+                document.getElementById('auto-run').checked = !document.getElementById('auto-run').checked;
+                toggleAutoRun(); break;
+            case 'r': case 'R': updatePipeline(); break;
+            case 'p': case 'P': document.getElementById('preset-select').focus(); break;
+        }
+    });
+
+    setInterval(() => {
+        const fpsEl = document.getElementById('status-bar-fps');
+        if (fpsEl) fpsEl.textContent = `${fps} FPS`;
+    }, 500);
+
+    // ── Advanced analysis ──
+    async function updateAdvanced() {
+        const params = getParams();
+        document.getElementById('status-text').innerText = 'Analyzing...';
+        const t0 = performance.now();
+        const qs = new URLSearchParams(params).toString();
+
+        try {
+            const [adv, cov, psd, zm] = await Promise.all([
+                fetch(`/api/advanced?${qs}`).then(r => r.json()),
+                fetch('/api/covariance').then(r => r.json()),
+                fetch('/api/psd?dt=0.2').then(r => r.json()),
+                fetch('/api/zernike_modes').then(r => r.json()),
+            ]);
+
+            const dt = ((performance.now() - t0) / 1000).toFixed(2);
+            document.getElementById('status-bar-timing').innerText = `analysis: ${dt}s`;
+
+            // ── Existing: slopes bar traces ──
+            function barTrace(id, values, color) {
+                const n = values.length;
+                const cols = values.map(v => v >= 0 ? color : '#f43f5e');
+                Plotly.react(id, [{
+                    x: Array.from({ length: n }, (_, i) => i), y: values, type: 'bar',
+                    marker: { color: cols, line: { width: 0 } },
+                    hovertemplate: '%{y:.4f}<extra></extra>',
+                }], {
+                    ...plotBase, margin: { l: 24, r: 10, t: 6, b: 24 },
+                    xaxis: { ...plotBase.xaxis, showticklabels: false },
+                    yaxis: { ...plotBase.yaxis, zeroline: true, zerolinecolor: 'rgba(255,255,255,0.08)', zerolinewidth: 1 },
+                    bargap: 0.15,
+                }, plotCfg);
+            }
+
+            function histTrace(id, bins) {
+                Plotly.react(id, [{
+                    x: Array.from({ length: bins.length }, (_, i) => i), y: bins, type: 'bar',
+                    marker: { color: '#f59e0b', opacity: 0.75, line: { width: 0 } },
+                    hovertemplate: '%{y}<extra></extra>',
+                }], {
+                    ...plotBase, margin: { l: 24, r: 10, t: 6, b: 24 },
+                    xaxis: { ...plotBase.xaxis, showticklabels: false },
+                    yaxis: { ...plotBase.yaxis },
+                    bargap: 0.05,
+                }, plotCfg);
+            }
+
+            barTrace('slopesXPlot', adv.slopes_x, '#6366f1');
+            barTrace('slopesYPlot', adv.slopes_y, '#06b6d4');
+            histTrace('histogramPlot', adv.histogram);
+
+            const setStat = (id, val) => document.getElementById(id).innerText = val.toFixed(4);
+            setStat('sx-mean', adv.stats.sx_mean); setStat('sx-std', adv.stats.sx_std);
+            setStat('sx-max', adv.stats.sx_max); setStat('sx-min', adv.stats.sx_min);
+            setStat('sy-mean', adv.stats.sy_mean); setStat('sy-std', adv.stats.sy_std);
+            setStat('sy-max', adv.stats.sy_max); setStat('sy-min', adv.stats.sy_min);
+            setStat('ph-mean', adv.stats.ph_mean); setStat('ph-std', adv.stats.ph_std);
+            setStat('ph-max', adv.stats.ph_max); setStat('ph-min', adv.stats.ph_min);
+
+            // ── 1. Slope covariance heatmap (32x32) ──
+            document.getElementById('cov-n').innerText = cov.n;
+            if (cov.cov_32x32 && cov.cov_32x32.length > 0) {
+                plotHeatmap('covariancePlot', cov.cov_32x32, divergeScale(), { zmid: 0, showText: false });
+            }
+
+            // ── 2. Total-power covariance (16x16) ──
+            if (cov.cov_16x16 && cov.cov_16x16.length > 0) {
+                plotHeatmap('covariance16Plot', cov.cov_16x16, divergeScale(), { zmid: 0, showText: false });
+            }
+
+            // ── 3. X-vs-Y slope scatter ──
+            const subapColors = ['#6366f1','#818cf8','#06b6d4','#22d3ee',
+                '#10b981','#34d399','#f59e0b','#fbbf24',
+                '#f97316','#fb923c','#ef4444','#f87171',
+                '#ec4899','#f472b6','#8b5cf6','#a78bfa'];
+            const indices = Array.from({ length: adv.slopes_x.length }, (_, i) => i);
+            Plotly.react('xyScatterPlot', [{
+                x: adv.slopes_x, y: adv.slopes_y, type: 'scatter', mode: 'markers+text',
+                text: indices.map(i => `#${i}`),
+                textposition: 'top center',
+                textfont: { size: 8, color: '#94a3b8' },
+                marker: {
+                    color: indices.map(i => subapColors[i % subapColors.length]),
+                    size: 8, line: { width: 0.5, color: '#fff' },
+                },
+                hovertemplate: 'Subap %{text}<br>X: %{x:.3f}<br>Y: %{y:.3f}<extra></extra>',
+            }, {
+                x: [0], y: [0], type: 'scatter', mode: 'markers',
+                marker: { color: '#fff', size: 4, symbol: 'x' },
+                showlegend: false,
+                hoverinfo: 'skip',
+            }], {
+                ...plotBase,
+                margin: { l: 36, r: 10, t: 6, b: 30 },
+                xaxis: { ...plotBase.xaxis, title: 'Slope X', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.1)' },
+                yaxis: { ...plotBase.yaxis, title: 'Slope Y', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.1)' },
+                hovermode: 'closest',
+                showlegend: false,
+                width: undefined, height: undefined,
+            }, plotCfg);
+
+            // ── 4. Temporal PSD ──
+            document.getElementById('psd-n').innerText = psd.n;
+            if (psd.freq && psd.freq.length > 0) {
+                Plotly.react('psdPlot', [{
+                    x: psd.freq, y: psd.power_db, type: 'scatter', mode: 'lines',
+                    line: { color: '#06b6d4', width: 1.5 },
+                    hovertemplate: 'f: %{x:.3f} Hz<br>PSD: %{y:.1f} dB<extra></extra>',
+                }], {
+                    ...plotBase,
+                    margin: { l: 40, r: 10, t: 6, b: 30 },
+                    xaxis: { ...plotBase.xaxis, title: 'Frequency (Hz)', type: 'log', dtick: 1 },
+                    yaxis: { ...plotBase.yaxis, title: 'Power (dB)' },
+                    hovermode: 'closest',
+                    width: undefined, height: undefined,
+                }, plotCfg);
+            }
+
+            // ── 5. Zernike mode gallery ──
+            const gallery = document.getElementById('zernikeGallery');
+            gallery.innerHTML = '';
+            if (zm.modes && zm.modes.length > 0) {
+                zm.modes.forEach((mode, i) => {
+                    const cell = document.createElement('div');
+                    cell.className = 'zernike-cell';
+                    const plotDiv = document.createElement('div');
+                    plotDiv.className = 'z-plot';
+                    plotDiv.id = `zernike-${i}`;
+                    cell.appendChild(plotDiv);
+                    const label = document.createElement('span');
+                    label.className = 'z-label';
+                    label.textContent = mode.name;
+                    cell.appendChild(label);
+                    const coeff = document.createElement('span');
+                    coeff.className = 'z-coeff';
+                    const cv = zm.coefficients ? zm.coefficients[mode.name] : 0;
+                    coeff.textContent = cv != null ? (cv >= 0 ? '+' : '') + cv.toFixed(3) : '--';
+                    coeff.style.color = cv >= 0 ? '#6366f1' : '#f43f5e';
+                    cell.appendChild(coeff);
+                    gallery.appendChild(cell);
+                });
+                // Render each heatmap after DOM append
+                requestAnimationFrame(() => {
+                    zm.modes.forEach((mode, i) => {
+                        const el = document.getElementById(`zernike-${i}`);
+                        if (el) plotHeatmap(el, mode.grid, divergeScale(), { zmid: 0, showText: false });
+                    });
+                });
+            }
+
+        } catch (e) {
+            console.error('updateAdvanced error:', e);
+        }
+
+        document.getElementById('status-text').innerText = 'Ready';
+        document.getElementById('slope-buf-count').innerText = 'refreshed';
+    }
+
+    document.getElementById('refresh-advanced-btn').addEventListener('click', updateAdvanced);
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.tab === 'advanced') setTimeout(updateAdvanced, 50);
+        });
+    });
+
+    // ── About page system info ──
+    async function loadSystemInfo() {
+        try {
+            const r = await fetch('/api/system');
+            const s = await r.json();
+            document.getElementById('about-python').textContent = `Python ${s.python}`;
+            document.getElementById('about-numpy').textContent = `NumPy ${s.numpy}`;
+            document.getElementById('about-scipy').textContent = `SciPy ${s.scipy}`;
+            document.getElementById('about-platform').textContent = s.platform.split(' ')[0];
+        } catch { }
+    }
+    document.querySelectorAll('.tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.tab === 'about') setTimeout(loadSystemInfo, 50);
+        });
+    });
+
+    loadSystemInfo();
+    updatePipeline();
+</script>
+{% endblock %}
