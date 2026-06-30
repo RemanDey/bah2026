@@ -82,6 +82,3 @@ static/
 
 All pipeline parameters are adjustable from the UI: turbulence severity, readout noise, photon noise, centroid method, loop gain, auto-run interval, Kolmogorov toggle.
 
-## License
-
-MIT
