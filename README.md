@@ -129,8 +129,3 @@ Key academic papers included in `Resources/`:
 This project is developed as part of **Bharatiya Antariksh Hackathon 2026**. All rights belong to the respective authors and organizers.
 
 ---
-
-## Contact
-
-**Reman Dey** — [reman.airport@gmail.com](mailto:reman.airport@gmail.com)  
-For questions, clarifications, or collaboration, please open an issue or reach out directly.
