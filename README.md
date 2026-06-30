@@ -1,11 +1,7 @@
 # BAH 2026 — Challenge 9: Wavefront Reconstruction & Turbulence Characterization
 
-**Author:** Reman Dey ([reman.airport@gmail.com](mailto:reman.airport@gmail.com))  
-**Repository:** [github.com/remandey/bah2026](https://github.com/remandey/bah2026)  
+**Webapp** [SH-WFS Pipeline](https://adaptive-optics.onrender.com)  
 **Hackathon:** Bharatiya Antariksh Hackathon 2026 (organized by ISRO)
-<br>
-**PPT:** [Link to Submission PPT](https://docs.google.com/presentation/d/1bKqGK3z9Vectp7GKCajRWVG9beHmGm4x3KNkcXZio0Y/edit?usp=sharing)
-
 ---
 
 ## Overview
